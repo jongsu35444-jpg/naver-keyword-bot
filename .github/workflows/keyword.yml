@@ -1,0 +1,62 @@
+name: Naver Keyword Bot
+
+on:
+  schedule:
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  send-keywords:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run keyword bot
+        run: |
+          pip install requests pytrends
+          python - <<'EOF'
+          import requests
+          from pytrends.request import TrendReq
+          import json
+
+          # 구글 트렌드 한국 실시간 키워드
+          pytrends = TrendReq(hl='ko', tz=540)
+          trending = pytrends.trending_searches(pn='south_korea')
+          keywords = trending[0].tolist()[:10]
+
+          # 네이버 광고 API로 검색량 확인
+          import time
+          import hmac
+          import hashlib
+          import base64
+
+          BASE_URL = "https://api.naver.com"
+          ACCESS_LICENSE = "${{ secrets.NAVER_AD_LICENSE }}"
+          SECRET_KEY = "${{ secrets.NAVER_AD_SECRET }}"
+          CUSTOMER_ID = "${{ secrets.NAVER_CUSTOMER_ID }}"
+
+          def get_signature(timestamp, method, path):
+              message = f"{timestamp}.{method}.{path}"
+              signature = hmac.new(SECRET_KEY.encode(), message.encode(), hashlib.sha256)
+              return base64.b64encode(signature.digest()).decode()
+
+          timestamp = str(int(time.time() * 1000))
+          path = "/keywordstool"
+          sig = get_signature(timestamp, "GET", path)
+
+          headers = {
+              "X-Timestamp": timestamp,
+              "X-API-KEY": ACCESS_LICENSE,
+              "X-Customer": CUSTOMER_ID,
+              "X-Signature": sig
+          }
+
+          message = "📊 오늘의 핫 키워드 TOP 10\n\n"
+          for i, kw in enumerate(keywords[:10], 1):
+              message += f"{i}. {kw}\n"
+
+          # 텔레그램 전송
+          token = "${{ secrets.TELEGRAM_TOKEN }}"
+          chat_id = "${{ secrets.CHAT_ID }}"
+          url = f"https://api.telegram.org/bot{token}/sendMessage"
+          requests.post(url, json={"chat_id": chat_id, "text": message})
+          print("전송 완료!")
+          EOF

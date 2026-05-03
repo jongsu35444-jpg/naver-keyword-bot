@@ -61,17 +61,21 @@ jobs:
               )
               data = res.json()
               items = data.get("keywordList", [])
-              
-              # 검색량 높은 순으로 정렬
-              items.sort(key=lambda x: x.get("monthlyPcQcCnt", 0) + x.get("monthlyMobileQcCnt", 0), reverse=True)
+
+              def get_total(x):
+                  pc = x.get("monthlyPcQcCnt", 0)
+                  mobile = x.get("monthlyMobileQcCnt", 0)
+                  if isinstance(pc, str): pc = 0
+                  if isinstance(mobile, str): mobile = 0
+                  return int(pc) + int(mobile)
+
+              items.sort(key=get_total, reverse=True)
               top_items = items[:10]
 
               message_text += f"🔹 {category} TOP 10\n"
               for item in top_items:
                   name = item.get("relKeyword", "")
-                  pc = item.get("monthlyPcQcCnt", 0)
-                  mobile = item.get("monthlyMobileQcCnt", 0)
-                  total = pc + mobile
+                  total = get_total(item)
                   message_text += f"  • {name}: {total:,}회\n"
               message_text += "\n"
               time.sleep(0.5)

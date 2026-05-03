@@ -11,36 +11,25 @@ jobs:
     steps:
       - name: Run keyword bot
         run: |
-          pip install requests pytrends
+          pip install requests
           python - <<'EOF'
           import requests
-          from pytrends.request import TrendReq
-          import json
-
-          # 구글 트렌드 한국 실시간 키워드
-          pytrends = TrendReq(hl='ko', tz=540)
-          trending = pytrends.trending_searches(pn='south_korea')
-          keywords = trending[0].tolist()[:10]
-
-          # 네이버 광고 API로 검색량 확인
           import time
           import hmac
           import hashlib
           import base64
+          from datetime import datetime
 
-          BASE_URL = "https://api.naver.com"
           ACCESS_LICENSE = "${{ secrets.NAVER_AD_LICENSE }}"
           SECRET_KEY = "${{ secrets.NAVER_AD_SECRET }}"
           CUSTOMER_ID = "${{ secrets.NAVER_CUSTOMER_ID }}"
 
-          def get_signature(timestamp, method, path):
-              message = f"{timestamp}.{method}.{path}"
-              signature = hmac.new(SECRET_KEY.encode(), message.encode(), hashlib.sha256)
-              return base64.b64encode(signature.digest()).decode()
-
           timestamp = str(int(time.time() * 1000))
           path = "/keywordstool"
-          sig = get_signature(timestamp, "GET", path)
+          method = "GET"
+          message = f"{timestamp}.{method}.{path}"
+          signature = hmac.new(SECRET_KEY.encode(), message.encode(), hashlib.sha256)
+          sig = base64.b64encode(signature.digest()).decode()
 
           headers = {
               "X-Timestamp": timestamp,
@@ -49,14 +38,26 @@ jobs:
               "X-Signature": sig
           }
 
-          message = "📊 오늘의 핫 키워드 TOP 10\n\n"
-          for i, kw in enumerate(keywords[:10], 1):
-              message += f"{i}. {kw}\n"
+          keywords = ["뷰티", "패션", "맛집", "여행", "운동"]
+          message_text = f"📊 오늘의 네이버 인기 키워드\n({datetime.now().strftime('%Y-%m-%d')})\n\n"
 
-          # 텔레그램 전송
+          for kw in keywords:
+              res = requests.get(
+                  f"https://api.naver.com/keywordstool?hintKeywords={kw}&showDetail=1",
+                  headers=headers
+              )
+              data = res.json()
+              items = data.get("keywordList", [])[:3]
+              message_text += f"🔹 {kw} 관련\n"
+              for item in items:
+                  name = item.get("relKeyword", "")
+                  count = item.get("monthlyPcQcCnt", 0)
+                  message_text += f"  • {name}: {count}회\n"
+              message_text += "\n"
+
           token = "${{ secrets.TELEGRAM_TOKEN }}"
           chat_id = "${{ secrets.CHAT_ID }}"
           url = f"https://api.telegram.org/bot{token}/sendMessage"
-          requests.post(url, json={"chat_id": chat_id, "text": message})
+          requests.post(url, json={"chat_id": chat_id, "text": message_text})
           print("전송 완료!")
           EOF

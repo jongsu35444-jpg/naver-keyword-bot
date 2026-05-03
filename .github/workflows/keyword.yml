@@ -38,17 +38,21 @@ jobs:
               "X-Signature": sig
           }
 
-          keywords = ["뷰티", "패션", "맛집", "여행", "운동"]
+          categories = [
+              "뷰티", "패션", "맛집", "여행", "축제",
+              "금융", "경제", "주식", "방송", "상품"
+          ]
+
           message_text = f"📊 오늘의 네이버 인기 키워드\n({datetime.now().strftime('%Y-%m-%d')})\n\n"
 
-          for kw in keywords:
+          for kw in categories:
               res = requests.get(
                   f"https://api.naver.com/keywordstool?hintKeywords={kw}&showDetail=1",
                   headers=headers
               )
               data = res.json()
-              items = data.get("keywordList", [])[:3]
-              message_text += f"🔹 {kw} 관련\n"
+              items = data.get("keywordList", [])[:10]
+              message_text += f"🔹 {kw} 관련 TOP 10\n"
               for item in items:
                   name = item.get("relKeyword", "")
                   count = item.get("monthlyPcQcCnt", 0)
@@ -58,6 +62,13 @@ jobs:
           token = "${{ secrets.TELEGRAM_TOKEN }}"
           chat_id = "${{ secrets.CHAT_ID }}"
           url = f"https://api.telegram.org/bot{token}/sendMessage"
-          requests.post(url, json={"chat_id": chat_id, "text": message_text})
+
+          # 메시지가 길면 나눠서 전송
+          chunk_size = 4000
+          for i in range(0, len(message_text), chunk_size):
+              chunk = message_text[i:i+chunk_size]
+              requests.post(url, json={"chat_id": chat_id, "text": chunk})
+              time.sleep(1)
+
           print("전송 완료!")
           EOF
